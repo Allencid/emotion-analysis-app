@@ -26,4 +26,4 @@ st.write(f"⚠️ 負向 - 平均值：{stats['負向平均值']:.3f}，標準�
 
 # 顯示圖表
 st.subheader("情緒信心圖（紅=負向、綠=正向）")
-st.image(image_path, caption="逐句情緒圖", use_column_width=True)
+st.image(image_path, caption="逐句情緒圖", use_container_width=True)
