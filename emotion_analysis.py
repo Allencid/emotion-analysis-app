@@ -1,17 +1,18 @@
-# emotion_analysis.py
-
 import torch
 import torch.nn.functional as F
-import json
 import re
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import Counter
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-MODEL_NAME = "uer/roberta-base-finetuned-jd-binary-chinese"
+# 換成 jackietung 模型
+MODEL_NAME = "jackietung/bert-base-chinese-finetuned-sentiment"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+
+# 自動讀取模型 labels 數量
+label_map = {0: "負向", 1: "中性", 2: "正向"}
 
 def sentence_split(text):
     punctuation = r'[，。！？]'
@@ -24,8 +25,11 @@ def predict_emotion(text):
         outputs = model(**inputs)
         probs = F.softmax(outputs.logits, dim=-1)
         pred_class = torch.argmax(probs, dim=1).item()
-    labels = ["負向", "正向"]
-    return {"text": text, "label": labels[pred_class], "confidence": round(probs[0][pred_class].item(), 4)}
+    return {
+        "text": text,
+        "label": label_map[pred_class],
+        "confidence": round(probs[0][pred_class].item(), 4)
+    }
 
 def analyze_text(text):
     sentences = sentence_split(text)
@@ -41,7 +45,10 @@ def analyze_text(text):
     # 圖表資料
     labels = [f"{i+1}" for i in range(len(results))]
     confidences = [r['confidence'] for r in results]
-    colors = ['green' if r['label'] == '正向' else 'red' for r in results]
+
+    # 顏色設定
+    color_dict = {"正向": "green", "中性": "gray", "負向": "red"}
+    colors = [color_dict[r['label']] for r in results]
 
     # 繪圖儲存
     plt.figure(figsize=(10, 6))
@@ -51,7 +58,7 @@ def analyze_text(text):
                  f"{result['label']} {result['confidence']:.2f}",
                  ha='center', va='bottom', fontsize=8)
     plt.ylim(0, 1.05)
-    plt.title("逐句情緒分析（紅：負向，綠：正向）")
+    plt.title("逐句情緒分析（紅：負向，灰：中性，綠：正向）")
     plt.xlabel("句子編號")
     plt.ylabel("模型信心分數")
     plt.grid(axis='y', linestyle='--', alpha=0.5)
@@ -61,27 +68,16 @@ def analyze_text(text):
     plt.close()
 
     # 統計資料
-    pos_scores = [r['confidence'] for r in results if r['label'] == '正向']
-    neg_scores = [r['confidence'] for r in results if r['label'] == '負向']
-    pos_mean = np.mean(pos_scores) if pos_scores else 0
-    pos_std = np.std(pos_scores) if pos_scores else 0
+    stats = {}
+    for label in ["正向", "中性", "負向"]:
+        scores = [r['confidence'] for r in results if r['label'] == label]
+        stats[f"{label}平均值"] = round(np.mean(scores), 3) if scores else 0
+        stats[f"{label}標準差"] = round(np.std(scores), 3) if scores else 0
+        stats[f"{label}句子數"] = len(scores)
 
-    neg_mean = np.mean(neg_scores) if neg_scores else 0
-    neg_std = np.std(neg_scores) if neg_scores else 0
-
-    # 情緒變化
+    # 情緒變化次數
     emotion_labels = [r['label'] for r in results]
     transitions = sum(1 for i in range(1, len(emotion_labels)) if emotion_labels[i] != emotion_labels[i - 1])
-    count = Counter(emotion_labels)
-
-    stats = {
-        "正向平均值": round(pos_mean, 3),
-        "正向標準差": round(pos_std, 3),
-        "負向平均值": round(neg_mean, 3),
-        "負向標準差": round(neg_std, 3),
-        "正向句子數": count.get('正向', 0),
-        "負向句子數": count.get('負向', 0),
-        "正負向變化次數": transitions
-    }
+    stats["情緒變化次數"] = transitions
 
     return results, stats, image_path
